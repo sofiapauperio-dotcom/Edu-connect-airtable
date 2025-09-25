@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EduConnect • Airtable Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <main class="max-w-4xl mx-auto p-6 space-y-8">
+    <header class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold">EduConnect × Airtable</h1>
+      <a class="text-sm underline" href="/api/health" target="_blank">/api/health</a>
+    </header>
+
+    <section class="bg-white rounded-xl border p-4">
+      <h2 class="font-semibold mb-3">Tabela alvo</h2>
+      <div class="flex gap-2 items-center">
+        <label class="text-sm">Nome da tabela</label>
+        <input id="tableName" value="Table 1" class="px-3 py-2 rounded border" />
+        <button id="btnListar" class="px-3 py-2 rounded bg-black text-white">Listar registros</button>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">Dica: se você renomeou a tabela no Airtable, use exatamente o mesmo nome aqui.</p>
+      <div id="saida" class="mt-4 text-sm"></div>
+    </section>
+
+    <section class="bg-white rounded-xl border p-4">
+      <h2 class="font-semibold mb-3">Criar registro</h2>
+      <div class="space-y-3">
+        <div class="grid md:grid-cols-2 gap-2">
+          <input id="fName" placeholder="Nome completo" class="px-3 py-2 rounded border" />
+          <input id="fNotes" placeholder="Observações" class="px-3 py-2 rounded border" />
+        </div>
+        <div class="grid md:grid-cols-2 gap-2">
+          <input id="fAssignee" placeholder="Responsável" class="px-3 py-2 rounded border" />
+          <input id="fStatus" placeholder="Status" class="px-3 py-2 rounded border" />
+        </div>
+        <div class="text-xs text-slate-500">
+          Preencha os campos conforme sua tabela do Airtable: Name, Notes, Assignee, Status
+        </div>
+      </div>
+      <div class="mt-3 flex gap-2">
+        <button id="btnCriar" class="px-3 py-2 rounded bg-indigo-600 text-white">Criar no Airtable</button>
+        <span id="msg" class="text-sm"></span>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-xl border p-4">
+      <h2 class="font-semibold mb-3">Registros</h2>
+      <div id="lista" class="grid gap-2"></div>
+    </section>
+  </main>
+
+  <script>
+    const api = (p, opts={}) => fetch(p, { headers:{ 'Content-Type':'application/json' }, ...opts }).then(r=>r.json());
+
+    async function listar() {
+      const table = encodeURIComponent(document.querySelector('#tableName').value || 'Table 1');
+      const data = await api(`/api/table/${table}/records?view=Grid%20view`);
+      if (data.error) {
+        document.querySelector('#saida').innerHTML = `<span class="text-red-600">Erro: ${data.error.message || 'Erro desconhecido'}</span>`;
+      } else {
+        document.querySelector('#saida').textContent = `${(data.records||[]).length} registros encontrados.`;
+      }
+      const host = document.querySelector('#lista');
+      host.innerHTML = (data.records||[]).map(rec => {
+        const fields = rec.fields || {};
+        
+        return `
+          <article class="p-3 border rounded">
+            <div class="font-medium mb-2">
+              ${fields.Name || 'Sem nome'} 
+              <span class="text-xs text-slate-500">${rec.id}</span>
+            </div>
+            <div class="grid grid-cols-1 gap-1 text-sm text-slate-600">
+              ${fields.Notes ? `<div><strong>Observações:</strong> ${fields.Notes}</div>` : ''}
+              ${fields.Assignee ? `<div><strong>Responsável:</strong> ${fields.Assignee}</div>` : ''}
+              ${fields.Status ? `<div><strong>Status:</strong> ${fields.Status}</div>` : ''}
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function criar(){
+      const table = encodeURIComponent(document.querySelector('#tableName').value || 'Table 1');
+      
+      // Coletar valores dos campos específicos do Airtable
+      const name = document.querySelector('#fName').value.trim();
+      const notes = document.querySelector('#fNotes').value.trim();
+      const assignee = document.querySelector('#fAssignee').value.trim();
+      const status = document.querySelector('#fStatus').value.trim();
+      
+      if (!name) {
+        document.querySelector('#msg').textContent = 'Nome é obrigatório!';
+        document.querySelector('#msg').className = 'text-sm text-red-600';
+        return;
+      }
+      
+      const fields = { Name: name };
+      
+      // Adicionar campos opcionais apenas se preenchidos
+      if (notes) fields.Notes = notes;
+      if (assignee) fields.Assignee = assignee;
+      if (status) fields.Status = status;
+      
+      const payload = { fields };
+      
+      try {
+        const res = await api(`/api/table/${table}/records`, { method:'POST', body: JSON.stringify(payload) });
+        if (res?.records) {
+          document.querySelector('#msg').textContent = 'Criado no Airtable com sucesso! ✅';
+          document.querySelector('#msg').className = 'text-sm text-green-600';
+          // Limpar todos os campos
+          document.querySelector('#fName').value = '';
+          document.querySelector('#fNotes').value = '';
+          document.querySelector('#fAssignee').value = '';
+          document.querySelector('#fStatus').value = '';
+          await listar();
+        } else {
+          document.querySelector('#msg').textContent = res?.error?.message || 'Erro ao criar registro';
+          document.querySelector('#msg').className = 'text-sm text-red-600';
+        }
+      } catch (e) {
+        document.querySelector('#msg').textContent = 'Erro de conexão com Airtable';
+        document.querySelector('#msg').className = 'text-sm text-red-600';
+      }
+    }
+
+    document.querySelector('#btnListar').onclick = listar;
+    document.querySelector('#btnCriar').onclick = criar;
+
+    // Listar ao carregar
+    listar();
+  </script>
+</body>
+</html>
